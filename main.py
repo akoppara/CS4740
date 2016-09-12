@@ -1,6 +1,7 @@
 __author__ = 'Alex'
 import os
 import re
+import copy
 
 corpus_dict = {}
 
@@ -110,7 +111,22 @@ def calc_all_corpora_unigram(corpora):
 
     return (corpora_probs, corpora_totals)
 
+# bigram counts come in format with respect to example sentence
+# I am the best and the worst
+# { I { am : 1 } ... the { best : 1, worst : 1 } }
+# { 'I' : 1/7... 'the' : 2/7 }
+def calc_bigram_prob(bigram_counts, corpora):
+    bigram_probs = copy.deepcopy(bigram_counts)
+    for key, value in bigram_probs.item():
+        for following_word in value:
+            bigram_prob = key[following_word] / unigram_counts[key]
+
+
+    return (unigram_counts, total_tokens)
+
+
 if __name__ == '__main__':
     corpora = grab_files()
     unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
+    bigram_probs, corpora_totals = calc_bigram_prob(corpora)
     
