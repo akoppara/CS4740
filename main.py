@@ -23,7 +23,6 @@ def grab_files ():
             name = get_corpus_name(path)
             corpus = get_corpus(path, files)
             cleaned = clean_corpus(corpus)
-            print cleaned
             corpus_dict[name] = cleaned
     return corpus_dict
 
@@ -142,18 +141,25 @@ def calc_all_corpora_unigram(corpora):
 # I am the best and the worst
 # { I { am : 1 } ... the { best : 1, worst : 1 } }
 # { 'I' : 1/7... 'the' : 2/7 }
-def calc_bigram_prob(bigram_counts, corpora):
+def calc_bigram_prob(bigram_counts, corpus):
+    # need unigram counts for division later
+    unigram_counts, total_tokens = count_tokens(corpus)
+    # copy of bigram_counts dictionary
     bigram_probs = copy.deepcopy(bigram_counts)
-    for key, value in bigram_probs.item():
-        for following_word in value:
-            bigram_prob = key[following_word] / unigram_counts[key]
-
-
-    return (unigram_counts, total_tokens)
-
+    # first for loop goes through outer layer of bigram counts
+    for key, value in bigram_probs.items():
+        # second for loop goes through the inner layer of each outer layer
+        for following_word, word_count in value.items():
+            bigram_prob = word_count / unigram_counts[key]
+            print (key + " " + following_word + ": ")
+            print(bigram_prob)
 
 if __name__ == '__main__':
     corpora = grab_files()
     unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
-    bigram_probs, corpora_totals = calc_bigram_prob(corpora)
+    for key,value in corpora.items():
+        bigram_counts = count_bigram_tokens(value)
+        calc_bigram_prob(bigram_counts, value)
+
+    #bigram_probs, corpora_totals = calc_bigram_prob(corpora)
     
