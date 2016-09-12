@@ -194,14 +194,16 @@ def _run_unigram_gen(sentence, corpus_probs):
         sentence += (next + " ")
         return _run_unigram_gen(sentence, corpus_probs)
 
-def generate_unigram_sentence(corpus, unigram_probs):
+def generate_unigram_sentence(corpus, unigram_probs, start=''):
     try:
         corpus_probs = unigram_probs[corpus]
     except KeyError:
         print("ERROR: Unknown corpus")
         sys.exit(1)
     #Generation ends when period is output
-    sentence = _run_unigram_gen('', corpus_probs)
+    if len(start) != 0:
+        start += " "
+    sentence = _run_unigram_gen(start, corpus_probs)
     print(sentence)
 
 
@@ -225,15 +227,19 @@ def _run_bigram_gen(sentence, last_word, corpus_probs):
         sentence += (next + " ")
         return _run_bigram_gen(sentence, next, corpus_probs)
 
-def generate_bigram_sentence(corpus, bigram_probs):
+def generate_bigram_sentence(corpus, bigram_probs, start="."):
     try:
         corpus_probs = bigram_probs[corpus]
     except KeyError:
         print("ERROR: Unknown corpus")
         sys.exit(1)
     #No <s> tag currently, sentences "start" with a period (removed at end of generation)
-    start = "."
-    sentence = _run_bigram_gen('', start, corpus_probs)
+    if start != ".":
+        #Custom start, get last word of sentence
+        last_word = start.split()[-1]
+        sentence = _run_bigram_gen(start + " ", last_word, corpus_probs)
+    else:
+        sentence = _run_bigram_gen('', start, corpus_probs)
     print(sentence)
 
 if __name__ == '__main__':
