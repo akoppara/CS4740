@@ -171,9 +171,6 @@ def calc_all_corpora_bigram(corpora):
     for key in corpora:
         corpus = corpora[key]
         bigram_counts = count_bigram_tokens(corpus)
-        # if(key == 'autos'):
-        #     print sum(bigram_counts['.'].values())
-        #     print count_tokens(corpus)[0]["."]
         bigram_probs = calc_bigram_prob(bigram_counts, corpus)
         corpora_probs[key] = bigram_probs
     return corpora_probs
@@ -201,11 +198,11 @@ def generate_unigram_sentence(corpus, unigram_probs):
     try:
         corpus_probs = unigram_probs[corpus]
     except KeyError:
-        print "ERROR: Unknown corpus"
+        print("ERROR: Unknown corpus")
         sys.exit(1)
     #Generation ends when period is output
     sentence = _run_unigram_gen('', corpus_probs)
-    print sentence
+    print(sentence)
 
 
 def _bigram_next_term(prev_term, corpus_probs):
@@ -232,12 +229,12 @@ def generate_bigram_sentence(corpus, bigram_probs):
     try:
         corpus_probs = bigram_probs[corpus]
     except KeyError:
-        print "ERROR: Unknown corpus"
+        print("ERROR: Unknown corpus")
         sys.exit(1)
     #No <s> tag currently, sentences "start" with a period (removed at end of generation)
     start = "."
     sentence = _run_bigram_gen('', start, corpus_probs)
-    print sentence
+    print(sentence)
 
 if __name__ == '__main__':
     corpora = grab_files()
@@ -256,5 +253,5 @@ if __name__ == '__main__':
         #Do stuff
         generate_bigram_sentence(corpus, bigram_probs)
     else:
-        print "ERROR: Unknown ngram type"
+        print("ERROR: Unknown ngram type")
         sys.exit(1)
