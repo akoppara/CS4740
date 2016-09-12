@@ -20,8 +20,37 @@ def grab_files ():
         if len(files):
             #Get the name of this corpus
             name = get_corpus_name(path)
-            corpus_dict[name] = (get_corpus(path, files))
+            corpus = get_corpus(path, files)
+            cleaned = clean_corpus(corpus)
+            corpus_dict[name] = cleaned
     return corpus_dict
+
+def clean_corpus(corpus):
+    #Remove tokens that are not alphanumeric
+    #Remove extraneous punctuation that doesn't cause loss of info
+    #Only keep: . ' - [space] 
+    allowed = ['.', "'", ' ', '-']
+    cleaned_corpus = []
+    for token in corpus:
+        if token.isalnum():
+            cleaned_corpus.append(token)
+        else:
+            #Remove punctuation, if string has len > 0 after keep, else discard
+            #Dashes are a special case, we only want to keep them if they are part of a word
+            #i.e run-down (the dash is surrounded by alphanumeric characters)
+            #We don't want to keep dashes if they are the only thing in the token
+            #i.e --- - -- are all invalid tokens here
+            clean_token = ''
+            for char in token:
+                if char.isalnum() or char in allowed:
+                    clean_token += char
+            if len(clean_token) != 0:
+                #Check for dashes
+                #If removing dashes from the clean token gives it a length of 0, discard
+                no_dash = clean_token.replace("-", "")
+                if len(no_dash) != 0:
+                    cleaned_corpus.append(clean_token)
+    return cleaned_corpus
 
 def get_corpus (path, files):
     splitted_corpus = []
@@ -44,6 +73,7 @@ def get_corpus (path, files):
             file_string = file_string[header_ending_index + 5:]
 
         splitted_corpus.extend(file_string.split())
+
 
     return splitted_corpus
 
