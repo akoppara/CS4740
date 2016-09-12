@@ -1,7 +1,9 @@
 __author__ = 'Alex'
 import os
+import sys
 import re
 import copy
+import numpy as np
 
 corpus_dict = {}
 
@@ -89,6 +91,12 @@ def count_tokens(corpus):
             counts[token] += 1
         else:
             counts[token] = 1
+    #Because of no <s> tag implementation currently, a "." is used
+    #as the first character of a corpus to capture the the first word as
+    #being a sentence starter
+    #Because of this, the unigram count is off by 1 for the "."
+    counts["."] += 1
+    total += 1
     return (counts, total)
 
 def count_bigram_tokens(corpus):
@@ -147,19 +155,106 @@ def calc_bigram_prob(bigram_counts, corpus):
     # copy of bigram_counts dictionary
     bigram_probs = copy.deepcopy(bigram_counts)
     # first for loop goes through outer layer of bigram counts
-    for key, value in bigram_probs.items():
+    for key, value in bigram_counts.items():
         # second for loop goes through the inner layer of each outer layer
         for following_word, word_count in value.items():
-            bigram_prob = word_count / unigram_counts[key]
-            print (key + " " + following_word + ": ")
-            print(bigram_prob)
+            bigram_prob = float(word_count) / float(unigram_counts[key])
+            bigram_probs[key][following_word] = bigram_prob
+            # print (key + " " + following_word + ": ")
+            # print(bigram_prob)
+
+    # print bigram_probs
+    return bigram_probs
+
+def calc_all_corpora_bigram(corpora):
+    corpora_probs = {}
+    for key in corpora:
+        corpus = corpora[key]
+        bigram_counts = count_bigram_tokens(corpus)
+        # if(key == 'autos'):
+        #     print sum(bigram_counts['.'].values())
+        #     print count_tokens(corpus)[0]["."]
+        bigram_probs = calc_bigram_prob(bigram_counts, corpus)
+        corpora_probs[key] = bigram_probs
+    return corpora_probs
+
+def _unigram_next_term(corpus_probs):
+    #Given a set of probabilities, choose a word randomly according to those probs
+    words = list(corpus_probs.keys())
+    probs = list(corpus_probs.values())
+    choice = np.random.choice(words, p=probs)
+    return choice
+
+def _run_unigram_gen(sentence, corpus_probs):
+    next = _unigram_next_term(corpus_probs)
+    if next == '.':
+        if len(sentence) == 0:
+            return _run_unigram_gen(sentence, corpus_probs)
+        else:
+            sentence += next
+            return sentence
+    else:
+        sentence += (next + " ")
+        return _run_unigram_gen(sentence, corpus_probs)
+
+def generate_unigram_sentence(corpus, unigram_probs):
+    try:
+        corpus_probs = unigram_probs[corpus]
+    except KeyError:
+        print "ERROR: Unknown corpus"
+        sys.exit(1)
+    #Generation ends when period is output
+    sentence = _run_unigram_gen('', corpus_probs)
+    print sentence
+
+
+def _bigram_next_term(prev_term, corpus_probs):
+    #Get all words from corpus_probs[prev_term]
+    next_word_probs = corpus_probs[prev_term]
+    words = list(next_word_probs.keys())
+    probs = list(next_word_probs.values())
+    choice = np.random.choice(words, p=probs)
+    return choice
+
+def _run_bigram_gen(sentence, last_word, corpus_probs):
+    next = _bigram_next_term(last_word, corpus_probs)
+    if next == ".":
+        if len(sentence) == 0:
+            return _run_bigram_gen(sentence, last_word, corpus_probs)
+        else:
+            sentence += next
+            return sentence
+    else:
+        sentence += (next + " ")
+        return _run_bigram_gen(sentence, next, corpus_probs)
+
+def generate_bigram_sentence(corpus, bigram_probs):
+    try:
+        corpus_probs = bigram_probs[corpus]
+    except KeyError:
+        print "ERROR: Unknown corpus"
+        sys.exit(1)
+    #No <s> tag currently, sentences "start" with a period (removed at end of generation)
+    start = "."
+    sentence = _run_bigram_gen('', start, corpus_probs)
+    print sentence
 
 if __name__ == '__main__':
     corpora = grab_files()
     unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
-    for key,value in corpora.items():
-        bigram_counts = count_bigram_tokens(value)
-        calc_bigram_prob(bigram_counts, value)
+    bigram_probs = calc_all_corpora_bigram(corpora)
 
-    #bigram_probs, corpora_totals = calc_bigram_prob(corpora)
-    
+    args = sys.argv
+    #args[1] is unigram or bigram
+    #args[2] is corpus
+    ngram = args[1]
+    corpus = args[2]
+    if ngram == "unigram":
+        #Do stuff
+        generate_unigram_sentence(corpus, unigram_probs)
+    elif ngram == "bigram":
+        #Do stuff
+        generate_bigram_sentence(corpus, bigram_probs)
+    else:
+        print "ERROR: Unknown ngram type"
+        sys.exit(1)
