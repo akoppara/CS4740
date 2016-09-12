@@ -22,6 +22,7 @@ def grab_files ():
             name = get_corpus_name(path)
             corpus = get_corpus(path, files)
             cleaned = clean_corpus(corpus)
+            print cleaned
             corpus_dict[name] = cleaned
     return corpus_dict
 
@@ -89,6 +90,32 @@ def count_tokens(corpus):
         else:
             counts[token] = 1
     return (counts, total)
+
+def count_bigram_tokens(corpus):
+    #dictonary to hold counts
+    d = {}
+
+    for i in range(len(corpus)):
+        #w_n
+        wordn = corpus[i]
+        #If first word of corpus, add period as n-1 term
+        if i == 0:
+            wordn1 = "."
+        else:
+            wordn1 = corpus[i-1]
+        if wordn1 in d:
+            wd = d[wordn1]
+            if wordn in wd:
+                wd[wordn] += 1
+            else:
+                wd[wordn] = 1
+        else:
+            wd = {}
+            wd[wordn] = 1
+            d[wordn1] = wd
+
+    return d
+
 
 #Calculates the unigram probabilities for a single corpus
 def calc_unigram_prob(counts, total):
