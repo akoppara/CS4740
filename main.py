@@ -323,6 +323,14 @@ def calc_bigram_freq (bigram_counts, vocab_size):
 if __name__ == '__main__':
     corpora = grab_files()
 
+    for corpus, words in corpora.items():
+        counts, totals = count_tokens(corpora[corpus])
+        word_counter = 0
+        for word in words:
+            if (counts[word] == 1):
+                words[word_counter] = '<unk>'
+            word_counter += 1
+
     unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
     bigram_probs = calc_all_corpora_bigram(corpora)
 
