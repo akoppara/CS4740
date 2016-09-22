@@ -142,7 +142,6 @@ def calc_all_corpora_unigram(corpora):
         unigram_probs = calc_unigram_prob(unigram_counts, total_tokens)
         corpora_probs[key] = unigram_probs
         corpora_totals[key] = total_tokens
-
     return (corpora_probs, corpora_totals)
 
 # bigram counts come in format with respect to example sentence
@@ -173,6 +172,11 @@ def calc_all_corpora_bigram(corpora):
         bigram_counts = count_bigram_tokens(corpus)
         bigram_probs = calc_bigram_prob(bigram_counts, corpus)
         corpora_probs[key] = bigram_probs
+
+        _,unigram_counts = calc_all_corpora_unigram(corpora)
+        vocab_size = unigram_counts[key]
+        calc_gt_probability(bigram_counts, vocab_size)
+
     return corpora_probs
 
 def _unigram_next_term(corpus_probs):
@@ -242,8 +246,83 @@ def generate_bigram_sentence(corpus, bigram_probs, start="."):
         sentence = _run_bigram_gen('', start, corpus_probs)
     print(sentence)
 
+
+
+
+#adjust threshold if necessary
+def calc_gt_probability (bigram_counts, vocab_size):
+    #threshold = 20
+    bigram_frequency_list = calc_bigram_freq(bigram_counts, vocab_size)
+    bigram_gt_c_star_list = {}
+    count = 0
+    sum_of_p = 0
+
+    for key, value in bigram_frequency_list.items():
+        if (key == 0):
+            c_star = (bigram_frequency_list[1])
+            #print(bigram_frequency_list[1])
+            bigram_gt_c_star_list[count] = c_star
+        elif ((bigram_frequency_list[key] == 0) or (key == len(bigram_frequency_list) - 1)):
+            bigram_gt_c_star_list[count] = 0
+        else:
+            c_star = ( key + 1 ) * ( ( bigram_frequency_list[key + 1] ) / ( bigram_frequency_list[key] ) )
+            bigram_gt_c_star_list[count] = c_star
+        count += 1
+
+        #if (bigram_frequency_list[key + 1] != 0):
+        #    c_star = ( key + 1 ) * ( ( bigram_frequency_list[key + 1] ) / ( bigram_frequency_list[key] ) )
+        #    bigram_gt_c_star_list[count] = c_star
+        #    count += 1
+        #elif (bigram_frequency_list[key + 1] == 0):
+        #    bigram_gt_c_star_list[count] = 0
+        #    break
+
+    bigram_gt_p_star_list = copy.deepcopy(bigram_gt_c_star_list)
+    for key, value in bigram_gt_p_star_list.items():
+        bigram_gt_p_star_list[key] = value / vocab_size
+        sum_of_p += bigram_gt_p_star_list[key]
+
+    #print(vocab_size)
+    #print(bigram_gt_c_star_list[0])
+    #print(bigram_gt_p_star_list[0])
+    #print(bigram_gt_p_star_list)
+    #print('*****************' + str(sum_of_p) + '***********')
+
+
+
+#bigram_counts: if given a sentence "I jumped over the fence and I fell"
+#the bigram counts look like { 'I' : { 'jumped' : 1 , 'fell' : 1 } ... }
+#the goal of this function is to count the frequency of each frequency of bigram happening
+#ex. there were 3 bigrams that occurred 1 time, 2 that occurred 2 times, 1 that occurred 3 times, and 10 that occurred 0 times
+#to calculate the bigrams that occurred 0 times, it is (V^2 - bigrams that have occurred) where V is the vocabulary
+def calc_bigram_freq (bigram_counts, vocab_size):
+    #print(bigram_counts)
+    bigram_freq = {}
+    max_value = 0
+    sum_of_freq = 0
+    for key, value in bigram_counts.items():
+        for word, frequency in value.items():
+            if frequency > max_value:
+                max_value = frequency
+    for x in range(0, max_value+1):
+        bigram_freq[x] = 0
+    for key, value in bigram_counts.items():
+        for word, frequency in value.items():
+            bigram_freq[frequency] += 1
+    for key, value in bigram_freq.items():
+        sum_of_freq += value
+    #print(vocab_size)
+    freq_for_0 = (vocab_size ** 2) - sum_of_freq
+    #print(sum_of_freq)
+    #print(vocab_size)
+    bigram_freq[0] = freq_for_0
+    #print(bigram_freq)
+    return (bigram_freq)
+    
+
 if __name__ == '__main__':
     corpora = grab_files()
+
     unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
     bigram_probs = calc_all_corpora_bigram(corpora)
 
