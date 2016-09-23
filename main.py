@@ -7,11 +7,12 @@ import numpy as np
 import math
 import operator
 import json
+import csv
 
 corpus_dict = {}
 
 UNK_TOKEN = "<unk>"
-N1_N0 = 0
+N1_N0 = {}
 unigram_threshold = 100000
 bigram_threshold = 100000
 
@@ -293,11 +294,10 @@ def _unigram_next_term(corpus_probs):
     #Given a set of probabilities, choose a word randomly according to those probs
     words = list(corpus_probs.keys())
     probs = list(corpus_probs.values())
-    print(sum(probs))
     choice = np.random.choice(words, p=probs)
     return choice
 
-def _run_unigram_gen(sentence, corpus_probs):
+def _run_unigram_gen(sentence, corpus_probs, limit=15):
     next = _unigram_next_term(corpus_probs)
     if next == '.':
         if len(sentence) == 0:
@@ -307,7 +307,10 @@ def _run_unigram_gen(sentence, corpus_probs):
             return sentence
     else:
         sentence += (next + " ")
-        return _run_unigram_gen(sentence, corpus_probs)
+        if len(sentence.split()) < limit:
+            return _run_unigram_gen(sentence, corpus_probs)
+        else:
+            return sentence
 
 def generate_unigram_sentence(corpus, unigram_probs, start=''):
     try:
@@ -327,7 +330,6 @@ def _bigram_next_term(prev_term, corpus_probs):
     next_word_probs = corpus_probs[prev_term]
     words = list(next_word_probs.keys())
     probs = list(next_word_probs.values())
-    print(sum(probs))
     choice = np.random.choice(words, p=probs)
     return choice
 
@@ -525,7 +527,7 @@ def calc_gt_all_corpora_unigram (corpora):
     for key, corpus in corpora.items():
         corpus_probs = {}
         unigram_counts, total_tokens = count_tokens(corpus)
-        p_star_values, total_c_star = calc_unigram_gt_prob(corpus)
+        p_star_values, total_c_star = calc_unigram_gt_prob(key, corpus)
         p_sum = 0
 
         freq_of_freqs = {}
@@ -548,9 +550,8 @@ def calc_gt_all_corpora_unigram (corpora):
     return (corpora_probs, corpora_totals)
 
 
-
-def calc_unigram_gt_prob (corpus):
-    unigram_freq, vocab_size = calc_unigram_freq(corpus)
+def calc_unigram_gt_prob (name, corpus):
+    unigram_freq, vocab_size = calc_unigram_freq(name, corpus)
     c_star_values = {}
     p_star_values = {}
     p_star_total = 0
@@ -599,7 +600,7 @@ def calc_unigram_gt_prob (corpus):
     #print(p_star_total)
     return (p_star_values, vocab_size)
 
-def calc_unigram_freq (corpus):
+def calc_unigram_freq (name, corpus):
     counts, total = count_tokens(corpus)
     frequency = {}
     max_value = 0
@@ -611,33 +612,27 @@ def calc_unigram_freq (corpus):
     for word, freq in counts.items():
         frequency[freq] += 1
 
-    #print(frequency)
+    #Because we replace all words with occurrance 1 with <unk>,
+    # frequency[1] would be 0, so frequency[1] is actually count of unks
+    frequency[1] = counts[UNK_TOKEN]
+
+    # print(frequency[1])
+    N1_N0[name] = frequency[1] / total
 
     return frequency, total
 
-
-
-def quick_test(probs):
-    print(probs["it"])
-    for word, prob in probs.items():
-        if prob == 0.0:
-            print(word)
-    
-
+ 
 def _unigram_perplexity(unigram_probs, test_file):
     #Calculate perplexity of test_set given the unigram_probs of the corpus
     #test_file will be an array of tokens for a given file
     #calc sum of log probs
     summation = 0.0
     N = len(test_file)
-    quick_test(unigram_probs)
     for i, word in enumerate(test_file):
-        print(word)
         try:
             prob = unigram_probs[word]
         except KeyError:
             prob = unigram_probs[UNK_TOKEN]
-        print(prob)
         summation += (-1) * (math.log(prob))
     #multiply by 1/N
     result = (1.0 / N) * summation
@@ -657,7 +652,7 @@ def calc_unigram_perplexity(corpora, unigram_probs, test_corpus):
     return perplexity_data
 
 
-def _bigram_perplexity(bigram_probs, test_file, unigram_counts):
+def _bigram_perplexity(corpus, bigram_probs, test_file, unigram_counts):
     summation = 0.0
     N = len(test_file)
     for i, word in enumerate(test_file):
@@ -673,9 +668,7 @@ def _bigram_perplexity(bigram_probs, test_file, unigram_counts):
             elif UNK_TOKEN in outer_prob:
                 prob = outer_prob[UNK_TOKEN]
             else:
-                #TODO: Uncomment me when smoothing done
-                #prob = c* / count(".")
-                prob = 0.0009 /unigram_counts["."]
+                prob = N1_N0[corpus] /unigram_counts["."]
         else:
             prev_word = test_file[i-1]
             if prev_word in bigram_probs:
@@ -689,9 +682,7 @@ def _bigram_perplexity(bigram_probs, test_file, unigram_counts):
             elif UNK_TOKEN in outer_prob:
                 prob = outer_prob[UNK_TOKEN]
             else:
-                #TODO: Uncomment me when smoothing done
-                #prob = c* / count(prev_word)
-                prob = 0.0009 / unigram_counts[prev_word]
+                prob = N1_N0[corpus] / unigram_counts[prev_word]
 
         # print "WORDS: " + prev_word + ", " + word + " PROB: " + str(prob)
 
@@ -709,10 +700,75 @@ def calc_bigram_perplexity(corpora, bigram_probs, test_corpus):
         for filename in test_corpus:
             test_file = test_corpus[filename]
             unigram_counts, _ = count_tokens(corpora[corpus])
-            perplexity = _bigram_perplexity(bigram_probs[corpus], test_file, unigram_counts)
+            perplexity = _bigram_perplexity(corpus, bigram_probs[corpus], test_file, unigram_counts)
             corpus_data[filename] = perplexity
         perplexity_data[corpus] = corpus_data
     return perplexity_data
+
+
+#Topic Classification code
+#For each corpus, calculate perplexity of each file
+#Results dict will have form:
+#   {file_i.txt : {corpus1: perp1, corpus2: perp2 ...}}
+
+def topic_classification():
+    corpora = grab_files()
+    #Need to generate N1_N0
+    calc_gt_all_corpora_unigram(corpora)
+    test_corpus = get_test_corpus()
+    bigram_probs = calc_gt_all_corpora_bigram(corpora)
+    perplexity_data = calc_bigram_perplexity(corpora, bigram_probs, test_corpus)
+    
+    classification_data = {}
+
+    for file_name in test_corpus:
+        classification_data[file_name] = {}
+
+    #perplexity_data has the form:
+    #   {corpus1: {file_i.txt: perp_i, file_j.txt: perp_j}}
+
+    for corpus, file_perp in perplexity_data.items():
+        for file_name, perp_score in file_perp.items():
+            classification_data[file_name][corpus] = perp_score
+
+    classification_key = {
+        "atheism" : 0,
+        "autos" : 1,
+        "graphics" : 2,
+        "medicine" : 3,
+        "motorcycles" : 4,
+        "religion" : 5,
+        "space" : 6
+    }
+
+    #Final output should be a dictionary like:
+    #   {file_i.txt : corpus_key}
+
+    results = {}
+
+    for file_name in classification_data:
+        perplexities = classification_data[file_name]
+        topic = min(perplexities.items(), key=operator.itemgetter(1))[0]
+        # print(file_name + ", " + topic)
+        results[file_name] = classification_key[topic]
+
+    # json.dump(results, open("classification_results.json", "w"))
+
+    #Need to export to csv
+    export_classification_results(results)
+
+
+def export_classification_results(results):
+    with open("results.csv", "w") as csvfile:
+        field_names = ["Id", "Prediction"]
+        writer = csv.DictWriter(csvfile, delimiter=',', lineterminator='\n', fieldnames=field_names)
+        writer.writeheader()
+        lines = []
+        for file_name, prediction in results.items():
+            lines.append({"Id": file_name, "Prediction" : prediction})
+        for line in lines:
+            writer.writerow(line)
+    print("DONE -- output is in results.csv")
 
 
 #Spell checking code
@@ -778,9 +834,10 @@ def parse_confusion_set():
 
     return confusion_set
 
-def spell_check(corpus):
+def spell_check(corpus, tokens):
 
     #Generate bigram model of this corpus
+    unigram_counts, _ = count_tokens(tokens)
     spelling_corpora = grab_spelling_files()
 
     spelling_bigrams = calc_all_corpora_bigram(spelling_corpora)
@@ -836,7 +893,10 @@ def spell_check(corpus):
                 else:
                     #TODO: Uncomment me when smoothing done
                     # curr_correct = c* / count(prev_token)
-                    curr_correct = 0.00009
+                    try:
+                        curr_correct = N1_N0[corpus] / unigram_counts[prev_token]
+                    except KeyError:
+                        curr_correct = N1_N0[corpus] / unigram_counts[UNK_TOKEN]
 
                 token_probs[token] = curr_correct
 
@@ -851,11 +911,14 @@ def spell_check(corpus):
                     else:
                         #TODO: Uncomment me when smoothing done
                         # other_correct = c* / count(prev_word)
-                        other_correct = 0.00009
+                        try:
+                            other_correct = N1_N0[corpus] / unigram_counts[prev_token]
+                        except KeyError:
+                            other_correct = N1_N0[corpus] / unigram_counts[UNK_TOKEN]
 
                     token_probs[other_token] = other_correct
 
-                correct_token = max(token_probs.iteritems(), key=operator.itemgetter(1))[0]
+                correct_token = max(token_probs.items(), key=operator.itemgetter(1))[0]
 
 
                 print ("Previous Token: ", prev_token)
@@ -904,11 +967,13 @@ def handle_sentence_generation(ngram, corpus):
 
 def _pretty_print_perplexity(data):
     print("PERPLEXITY")
-    for file_name, perplexity in data.iteritems():
+    for file_name, perplexity in data.items():
         print(file_name + ": " + str(perplexity))
 
 def handle_perplexity_calculation(ngram, corpus):
     corpora = grab_files()
+    #Need to generate N1_N0
+    calc_gt_all_corpora_unigram(corpora)
     test_corpus = get_test_corpus()
     if ngram == "unigram":
         #Non smoothed
@@ -923,13 +988,16 @@ def handle_perplexity_calculation(ngram, corpus):
         _pretty_print_perplexity(data)
         sys.exit(0)
     elif ngram == "bigram":
-        bigram_probs = calc_all_corpora_bigram(corpora)
+        #Non smoothed
+        # bigram_probs = calc_all_corpora_bigram(corpora)
+        bigram_probs = calc_gt_all_corpora_bigram(corpora)
         perplexity_data = calc_bigram_perplexity(corpora, bigram_probs, test_corpus)
         try:
             data = perplexity_data[corpus]
         except KeyError:
             print("ERROR: Unknown corpus")
             sys.exit(1)
+        print(N1_N0)
         _pretty_print_perplexity(data)
         sys.exit(0)
     else:
@@ -938,12 +1006,13 @@ def handle_perplexity_calculation(ngram, corpus):
 
 def handle_spell_checker(corpus):
     corpora = grab_files()
+    calc_gt_all_corpora_unigram(corpora)
     try:
         dummy = corpora[corpus]
     except KeyError:
         print("ERROR: Unknown corpus")
         sys.exit(1)
-    spell_check(corpus)
+    spell_check(corpus, corpora[corpus])
     print("DONE")
 
 if __name__ == '__main__':
@@ -961,12 +1030,13 @@ if __name__ == '__main__':
 
     # spell_check("atheism")
 
-    arg_options = ["sentence", "perplexity", "spell-check", "test"]
+    arg_options = ["sentence", "perplexity", "spell-check", "classification", "test"]
 
     secondary_opts = {
     "spell-check" : 1,
     "sentence": 2,
     "perplexity" : 2,
+    "classification" : 0,
     "test":  (-1)
     }
 
@@ -983,6 +1053,9 @@ if __name__ == '__main__':
             corpus = args[3]
         elif num_secondary == 1:
             corpus = args[2]
+        elif num_secondary == 0:
+            #classification needs no args
+            pass
         else:
             #testing purposes, add any variables needed here
             pass
@@ -993,19 +1066,22 @@ if __name__ == '__main__':
             handle_perplexity_calculation(ngram, corpus)
         elif option == "spell-check":
             handle_spell_checker(corpus)
+        elif option == "classification":
+            topic_classification()
         else:
-            #testing purposes, call any functions here
-            corpora = grab_files()
-            #calc_gt_all_corpora_unigram(corpora)
-            #gt_probs = calc_gt_all_corpora_bigram(corpora)
-            #reg_probs = calc_all_corpora_bigram(corpora)
-            #print(gt_probs["atheism"])
+            # corpora = grab_files()
+            # #calc_gt_all_corpora_unigram(corpora)
+            # gt_probs = calc_gt_all_corpora_bigram(corpora)
+            # reg_probs = calc_all_corpora_bigram(corpora)
+            # print(gt_probs["atheism"])
             # print reg_probs
             # json.dump(gt_probs["atheism"], open("gt.json", "w"))
             # json.dump(reg_probs["atheism"], open("reg.json", "w"))
+            # calc_gt_all_corpora_bigram(corpora)
             #calc_gt_all_corpora_bigram(corpora)
             #for key in corpora:
             #    count_trigram_tokens(corpora[key])
+            topic_classification()
 
     else:
         print("ERROR: Unknown action option")
