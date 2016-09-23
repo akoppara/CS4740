@@ -368,27 +368,22 @@ def calc_gt_all_corpora_bigram (corpora):
         corpus_probs = {}
         bigram_counts = count_bigram_tokens(corpus)
         unigram_counts, total_tokens = count_tokens(corpus)
-        p_star_values, total_c_star = calc_bigram_gt_prob(corpus)
-        p_sum = 0
+        p_star_values, total_c_star, c_star_values = calc_bigram_gt_prob(corpus)
         #print(p_star_values)
-        freq_of_freqs = {}
 
         for word, following in bigram_counts.items():
+            p_sum = 0
+            sum_of_counts = 0
             for following_word, count in following.items():
-                if count in freq_of_freqs:
-                    freq_of_freqs[count] += 1
-                else:
-                    freq_of_freqs[count] = 1
+                sum_of_counts += c_star_values[count]
 
-        for word, following in bigram_counts.items():
             following_probs = {}
             for following_word, count in following.items():
-                prob = p_star_values[count] / freq_of_freqs[count]
+                prob = c_star_values[count] / sum_of_counts
                 following_probs[following_word] = prob
                 p_sum += following_probs[following_word]
             corpus_probs[word] = following_probs
 
-        print(p_sum)
         corpora_probs[key] = corpus_probs
         corpora_totals[key] = total_c_star
 
@@ -405,15 +400,19 @@ def calc_bigram_gt_prob (corpus):
     for freq, freq_of_freq in bigram_freq.items():
         first_or_not_empty = (bigram_freq[freq] != 0) or (freq == 0) 
         if ((first_or_not_empty) and (freq < len(bigram_freq)-1)):
-            if (freq != 0):
-                c_star = (freq + 1) * ( ( bigram_freq[freq + 1] ) / ( bigram_freq[freq] ) )
-                c_star_values[freq] = c_star
+            if (bigram_freq[freq + 1] != 0):                 
+                if (freq != 0):
+                    c_star = (freq + 1) * ( ( bigram_freq[freq + 1] ) / ( bigram_freq[freq] ) )
+                    c_star_values[freq] = c_star
+                else:
+                    c_star = bigram_freq[freq + 1]
+                    c_star_values[freq] = c_star
             else:
-                c_star = bigram_freq[freq + 1] / total_possible
-                c_star_values[freq] = c_star
+                    c_star = bigram_freq[freq]
+                    c_star_values[freq] = c_star
         else:
             c_star = bigram_freq[freq]
-            c_star_values[freq] = c_star 
+            c_star_values[freq] = c_star
 
     total_possible = 0
     for freq, c_star in c_star_values.items():
@@ -438,7 +437,7 @@ def calc_bigram_gt_prob (corpus):
             p_star_total += p_star * freq
             count += 1
 
-    return (p_star_values, total_possible)
+    return (p_star_values, total_possible, c_star_values)
 
 
 
@@ -517,12 +516,16 @@ def calc_unigram_gt_prob (corpus):
     for freq, freq_of_freq in unigram_freq.items():
         first_or_not_empty = (unigram_freq[freq] != 0) or (freq == 0) 
         if ((first_or_not_empty) and (freq < len(unigram_freq)-1)):
-            if (freq != 0):
-                c_star = (freq + 1) * ( ( unigram_freq[freq + 1] ) / ( unigram_freq[freq] ) )
-                c_star_values[freq] = c_star
+            if (unigram_freq[freq + 1] != 0):                 
+                if (freq != 0):
+                    c_star = (freq + 1) * ( ( unigram_freq[freq + 1] ) / ( unigram_freq[freq] ) )
+                    c_star_values[freq] = c_star
+                else:
+                    c_star = unigram_freq[freq + 1]
+                    c_star_values[freq] = c_star
             else:
-                c_star = unigram_freq[freq + 1] / vocab_size
-                c_star_values[freq] = c_star
+                    c_star = unigram_freq[freq]
+                    c_star_values[freq] = c_star
         else:
             c_star = unigram_freq[freq]
             c_star_values[freq] = c_star
