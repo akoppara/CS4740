@@ -29,7 +29,7 @@ def grab_files ():
             name = get_corpus_name(path)
             if name != "test":
                 corpus = get_corpus(path, files)
-                cleaned = clean_corpus(corpus)
+                cleaned = add_unk_token(clean_corpus(corpus))
                 corpus_dict[name] = cleaned
     return corpus_dict
 
@@ -59,6 +59,15 @@ def clean_corpus(corpus):
                 if len(no_dash) != 0:
                     cleaned_corpus.append(clean_token)
     return cleaned_corpus
+
+def add_unk_token(corpus):
+    counts, totals = count_tokens(corpus)
+    word_counter = 0
+    for word in corpus:
+        if (counts[word] == 1):
+            corpus[word_counter] = UNK_TOKEN
+        word_counter += 1
+    return corpus
 
 def get_corpus (path, files):
     splitted_corpus = []
@@ -358,9 +367,9 @@ def _unigram_perplexity(unigram_probs, test_file):
             prob = unigram_probs[word]
         except KeyError:
             #TODO: Uncomment me when unknown/smoothing implemented
-            # prob = unigram_probs[UNK_TOKEN]
-            print "UNK"
-            prob = 0.0025
+            prob = unigram_probs[UNK_TOKEN]
+            # print "UNK"
+            # prob = 0.0025
         summation += (-1) * (math.log(prob))
     #multiply by 1/N
     result = (1.0 / N) * summation
@@ -380,36 +389,49 @@ def calc_unigram_perplexity(corpora, unigram_probs, test_corpus):
     return perplexity_data
 
 
-def _bigram_perplexity(bigram_probs, test_file):
+def _bigram_perplexity(bigram_probs, test_file, unigram_counts):
     summation = 0.0
     N = len(test_file)
     for i, word in enumerate(test_file):
-        #If first word, prob is P(word | .)
-        #Else prob is P(word | test_file[i-1])
-        if i == 0:
-            try:
-                prob = bigram_probs["."][word]
-            except KeyError:
-                #Here, we know that word is the unknown
-                prob = bigram_probs["."][UNK_TOKEN]
-        else:
-            try:
-                prev_word = test_file[i-1]
-                outer_prob = bigram_probs[prev_word]
-            except KeyError:
-                #Outer word is unknown
+        if i==0:
+            prev_word = "."
+            if "." in bigram_probs:
+                outer_prob = bigram_probs["."]
+            else:
                 outer_prob = bigram_probs[UNK_TOKEN]
-            #Inner prob
-            try:
+
+            if word in outer_prob:
                 prob = outer_prob[word]
-            except KeyError:
+            elif UNK_TOKEN in outer_prob:
                 prob = outer_prob[UNK_TOKEN]
+            else:
+                #TODO: Uncomment me when smoothing done
+                #prob = c* / count(".")
+                prob = 0.0009 /unigram_counts["."]
+        else:
+            prev_word = test_file[i-1]
+            if prev_word in bigram_probs:
+                outer_prob = bigram_probs[prev_word]
+            else:
+                prev_word = UNK_TOKEN
+                outer_prob = bigram_probs[UNK_TOKEN]
+
+            if word in outer_prob:
+                prob = outer_prob[word]
+            elif UNK_TOKEN in outer_prob:
+                prob = outer_prob[UNK_TOKEN]
+            else:
+                #TODO: Uncomment me when smoothing done
+                #prob = c* / count(prev_word)
+                prob = 0.0009 / unigram_counts[prev_word]
+
+        # print "WORDS: " + prev_word + ", " + word + " PROB: " + str(prob)
 
         summation += (-1) * (math.log(prob))
-        #multiply by 1/N
-        result = (1.0 / N) * summation
-        #answer is e^result
-        return math.exp(result) 
+    #multiply by 1/N
+    result = (1.0 / N) * summation
+    #answer is e^result
+    return math.exp(result) 
 
 
 def calc_bigram_perplexity(corpora, bigram_probs, test_corpus):
@@ -418,7 +440,8 @@ def calc_bigram_perplexity(corpora, bigram_probs, test_corpus):
         corpus_data = {}
         for filename in test_corpus:
             test_file = test_corpus[filename]
-            perplexity = _bigram_perplexity(bigram_probs[corpus], test_file)
+            unigram_counts, _ = count_tokens(corpora[corpus])
+            perplexity = _bigram_perplexity(bigram_probs[corpus], test_file, unigram_counts)
             corpus_data[filename] = perplexity
         perplexity_data[corpus] = corpus_data
     return perplexity_data
@@ -448,7 +471,7 @@ def grab_spelling_files():
                     corpus.extend(file_string.split())
                 # corpus = get_corpus(path, files)
                 # cleaned = clean_corpus(corpus)
-                corpus_dict[name] = corpus
+                corpus_dict[name] = add_unk_token(corpus)
     return corpus_dict
 
 def parse_confusion_set():
@@ -488,8 +511,6 @@ def parse_confusion_set():
     return confusion_set
 
 def spell_check(corpus):
-    #TODO: Remove me when unknown/smoothing implemented
-    raise NotImplementedError
 
     #Generate bigram model of this corpus
     spelling_corpora = grab_spelling_files()
@@ -531,35 +552,39 @@ def spell_check(corpus):
                 else:
                     prev_token = file_tokens[i-1]
     #           Pick the word that is more likely to be there (must be a confusion word)
-                try:
+                
+                if prev_token in bigram_probs:
                     next_token_probs = bigram_probs[prev_token]
-                except KeyError:
-                    #TODO: Uncomment me when unknown/smoothing implemented
-                    # next_token_probs = bigram_probs[UNK_TOKEN]
-                    print "KeyError!"
-                    raise KeyError
+                else:
+                    prev_token = UNK_TOKEN
+                    next_token_probs = bigram_probs[UNK_TOKEN]
 
                 token_probs = {}
 
-                try:
-    #               Get the prob that current token is correct
+                if token in next_token_probs:
                     curr_correct = next_token_probs[token]
-                except KeyError:
-                    #TODO: Uncomment me when unknown/smoothing implemented
-                    # curr_correct  = next_token_probs[UNK_TOKEN]
-                    curr_correct = 0.0
+                elif UNK_TOKEN in next_token_probs:
+                    curr_correct = next_token_probs[UNK_TOKEN]
+                else:
+                    #TODO: Uncomment me when smoothing done
+                    # curr_correct = c* / count(prev_token)
+                    curr_correct = 0.00009
 
                 token_probs[token] = curr_correct
 
                 other_options = confusion_set[token]
                 #for each other option, get the prob
                 for other_token in other_options:
-                    try:
+                    if other_token in next_token_probs:
                         other_correct = next_token_probs[other_token]
-                    except KeyError:
-                        #TODO: Uncomment me when unknown/smoothing implemented
-                        # other_correct = next_token_probs[UNK_TOKEN]
-                        other_correct = 0.0
+                    elif UNK_TOKEN in next_token_probs:
+                        other_token = UNK_TOKEN
+                        other_correct = next_token_probs[UNK_TOKEN]
+                    else:
+                        #TODO: Uncomment me when smoothing done
+                        # other_correct = c* / count(prev_word)
+                        other_correct = 0.00009
+
                     token_probs[other_token] = other_correct
 
                 correct_token = max(token_probs.iteritems(), key=operator.itemgetter(1))[0]
@@ -691,17 +716,23 @@ if __name__ == '__main__':
         else:
             #testing purposes, call any functions here
             corpora = grab_files()
-
-            for corpus, words in corpora.items():
-                counts, totals = count_tokens(corpora[corpus])
-                word_counter = 0
-                for word in words:
-                    if (counts[word] == 1):
-                        words[word_counter] = UNK_TOKEN
-                    word_counter += 1
-
-            unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
             bigram_probs = calc_all_corpora_bigram(corpora)
+            print bigram_probs["atheism"]
+            summation = 0.0
+            for word, val in bigram_probs["atheism"].iteritems():
+                summation += val
+            print summation
+            print bigram_probs["atheism"][UNK_TOKEN]
+            # for corpus, words in corpora.items():
+            #     counts, totals = count_tokens(corpora[corpus])
+            #     word_counter = 0
+            #     for word in words:
+            #         if (counts[word] == 1):
+            #             words[word_counter] = UNK_TOKEN
+            #         word_counter += 1
+
+            # unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
+            # bigram_probs = calc_all_corpora_bigram(corpora)
 
     else:
         print("ERROR: Unknown action option")
