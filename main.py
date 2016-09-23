@@ -153,6 +153,38 @@ def count_bigram_tokens(corpus):
 
     return d
 
+def count_trigram_tokens(corpus):
+    d = {}
+    for i in range (len(corpus)):
+        wordn = corpus[i]
+
+        if (i == 0):
+            wordn1 = "."
+            wordn2 = "."
+        elif (i == 1):
+            wordn1= corpus[i-1]
+            wordn2 = "."
+        else:
+            wordn1 = corpus[i-1]
+            wordn2 = corpus[i-2]
+
+        if wordn2 in d:
+            wd2 = d[wordn2]
+            if wordn1 in wd2:
+                wd1 = wd2[wordn1]
+                if wordn in wd1:
+                    wd1[wordn] += 1
+                else:
+                    wd1[wordn] = 1
+            else:
+                wd1 = {}
+                wd2[wordn1] = wd1
+        else:
+            wd2 = {}
+            d[wordn2] = wd2
+
+    print(d)
+
 
 #Calculates the unigram probabilities for a single corpus
 def calc_unigram_prob(counts, total):
