@@ -12,6 +12,8 @@ corpus_dict = {}
 
 UNK_TOKEN = "<unk>"
 N1_N0 = 0
+unigram_threshold = 100000
+bigram_threshold = 100000
 
 def get_corpus_name(path):
     if 'train_docs' in path:
@@ -252,7 +254,6 @@ def calc_all_corpora_bigram(corpora):
         #_,unigram_counts = calc_all_corpora_unigram(corpora)
         #vocab_size = unigram_counts[key]
         #calc_gt_probability(bigram_counts, vocab_size)
-
     return corpora_probs
 
 def calc_trigram_prob(trigram_counts, corpus):
@@ -262,17 +263,16 @@ def calc_trigram_prob(trigram_counts, corpus):
     # copy of bigram_counts dictionary
     trigram_probs = copy.deepcopy(trigram_counts)
     # first for loop goes through outer layer of trigram counts
-    for key, value in bigram_counts.items():
+    for first_word, second_words in trigram_counts.items():
         # second for loop goes through the inner layer of each outer layer
-        for following_word, word_count in value.items():
-            bigram_prob = float(word_count) / float(unigram_counts[key])
-            bigram_probs[key][following_word] = bigram_prob
-            # print (key + " " + following_word + ": ")
-            # print(bigram_prob)
+        for second_word, third_words in second_words.items():
+            for third_word, word_count in third_words.items():
+                #print(bigram_counts[first_word][second_word])
+                trigram_prob = float(word_count) / float(bigram_counts[first_word][second_word])
+                trigram_probs[first_word][second_word][third_word] = trigram_prob
 
-    # print bigram_probs
-
-    return bigram_probs
+    #print (trigram_probs['.']['.'])
+    return trigram_probs
 
 def calc_all_corpora_trigram(corpora):
     corpora_probs = {}
@@ -281,6 +281,7 @@ def calc_all_corpora_trigram(corpora):
         trigram_counts = count_trigram_tokens(corpus)
         trigram_probs = calc_trigram_prob(trigram_counts, corpus)
         corpora_probs[key] = trigram_probs
+        #print(trigram_probs)
 
         #_,unigram_counts = calc_all_corpora_unigram(corpora)
         #vocab_size = unigram_counts[key]
@@ -358,6 +359,51 @@ def generate_bigram_sentence(corpus, bigram_probs, start="."):
     print(sentence)
 
 
+def _trigram_next_term(last_term, word_before_last_word, corpus_probs):
+    #Get all words from corpus_probs[prev_term]
+    next_word_probs = corpus_probs[word_before_last_word][last_term]
+    words = list(next_word_probs.keys())
+    probs = list(next_word_probs.values())
+    print(sum(probs))
+    diff = sum(probs) - 1
+    if (sum(probs) != 1):
+        if '.' in corpus_probs[word_before_last_word][last_term]:
+            corpus_probs[word_before_last_word][last_term]['.'] -= diff
+            words = list(next_word_probs.keys())
+            probs = list(next_word_probs.values())
+    choice = np.random.choice(words, p=probs)
+    return choice
+
+def _run_trigram_gen(sentence, last_word, word_before_last_word, corpus_probs):
+    next = _trigram_next_term(last_word, word_before_last_word, corpus_probs)
+    #print(next)
+    if next == ".":
+        if len(sentence) == 0:
+            return _run_trigram_gen(sentence, last_word, word_before_last_word, corpus_probs)
+        else:
+            sentence += next
+            return sentence
+    else:
+        sentence += (next + " ")
+        return _run_trigram_gen(sentence, next, last_word, corpus_probs)
+
+def generate_trigram_sentence(corpus, trigram_probs, start="."):
+    try:
+        corpus_probs = trigram_probs[corpus]
+    except KeyError:
+        print("ERROR: Unknown corpus")
+        sys.exit(1)
+    #No <s> tag currently, sentences "start" with a period (removed at end of generation)
+    if start != ".":
+        #Custom start, get last word of sentence
+        last_word = start.split()[-1]
+        word_before_last_word = start.split()[-2]
+        sentence = _run_trigram_gen(start + " ", last_word, word_before_last_word, corpus_probs)
+    else:
+        sentence = _run_trigram_gen('', start, start, corpus_probs)
+    print(sentence)
+
+
 
 def calc_gt_all_corpora_bigram (corpora):
     corpora_probs = {}
@@ -388,7 +434,6 @@ def calc_gt_all_corpora_bigram (corpora):
     return (corpora_probs)
 
 #adjust threshold if necessary
-bigram_threshold = 100000
 def calc_bigram_gt_prob (corpus):
     bigram_freq, total_possible = calc_bigram_freq(corpus)
     c_star_values = {}
@@ -504,7 +549,6 @@ def calc_gt_all_corpora_unigram (corpora):
 
 
 
-unigram_threshold = 10000
 def calc_unigram_gt_prob (corpus):
     unigram_freq, vocab_size = calc_unigram_freq(corpus)
     c_star_values = {}
@@ -850,6 +894,10 @@ def handle_sentence_generation(ngram, corpus):
         #Smoothed
         bigram_probs = calc_gt_all_corpora_bigram(corpora)
         generate_bigram_sentence(corpus, bigram_probs)
+    elif ngram == "trigram":
+        #unsmoothed
+        trigram_probs = calc_all_corpora_trigram(corpora)
+        generate_trigram_sentence(corpus, trigram_probs)
     else:
         print("ERROR: Unknown ngram type")
         sys.exit(1)
@@ -949,13 +997,12 @@ if __name__ == '__main__':
             #testing purposes, call any functions here
             corpora = grab_files()
             #calc_gt_all_corpora_unigram(corpora)
-            gt_probs = calc_gt_all_corpora_bigram(corpora)
-            reg_probs = calc_all_corpora_bigram(corpora)
-            print(gt_probs["atheism"])
+            #gt_probs = calc_gt_all_corpora_bigram(corpora)
+            #reg_probs = calc_all_corpora_bigram(corpora)
+            #print(gt_probs["atheism"])
             # print reg_probs
             # json.dump(gt_probs["atheism"], open("gt.json", "w"))
             # json.dump(reg_probs["atheism"], open("reg.json", "w"))
-            calc_gt_all_corpora_bigram(corpora)
             #calc_gt_all_corpora_bigram(corpora)
             #for key in corpora:
             #    count_trigram_tokens(corpora[key])
