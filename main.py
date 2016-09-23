@@ -292,11 +292,10 @@ def _unigram_next_term(corpus_probs):
     #Given a set of probabilities, choose a word randomly according to those probs
     words = list(corpus_probs.keys())
     probs = list(corpus_probs.values())
-    print(sum(probs))
     choice = np.random.choice(words, p=probs)
     return choice
 
-def _run_unigram_gen(sentence, corpus_probs):
+def _run_unigram_gen(sentence, corpus_probs, limit=15):
     next = _unigram_next_term(corpus_probs)
     if next == '.':
         if len(sentence) == 0:
@@ -306,7 +305,10 @@ def _run_unigram_gen(sentence, corpus_probs):
             return sentence
     else:
         sentence += (next + " ")
-        return _run_unigram_gen(sentence, corpus_probs)
+        if len(sentence.split()) < limit:
+            return _run_unigram_gen(sentence, corpus_probs)
+        else:
+            return sentence
 
 def generate_unigram_sentence(corpus, unigram_probs, start=''):
     try:
