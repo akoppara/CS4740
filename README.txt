@@ -36,6 +36,8 @@ Args: Only requires [corpusName]
 
 This will run the spell checker on the files located in [corpusName]\test_modified_docs and output the changed files into test_docs in that same folder.
 
+NOTE: Substituting corpusName with all as above will run the spell checker on each corpus one by one and notify when each one is completed.
+
 Option: classification
 Args: No args required
 

@@ -294,7 +294,6 @@ def _unigram_next_term(corpus_probs):
     #Given a set of probabilities, choose a word randomly according to those probs
     words = list(corpus_probs.keys())
     probs = list(corpus_probs.values())
-    print(sum(probs))
     choice = np.random.choice(words, p=probs)
     return choice
 
