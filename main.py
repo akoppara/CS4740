@@ -543,7 +543,7 @@ def calc_gt_all_corpora_unigram (corpora):
             corpus_probs[word] = prob
             p_sum += corpus_probs[word]
         #print(corpus_probs)
-        print(p_sum)
+        # print(p_sum)
         corpora_probs[key] = corpus_probs
         corpora_totals[key] = total_c_star
 
@@ -1032,6 +1032,11 @@ def _pretty_print_perplexity(data):
     for file_name, perplexity in data.items():
         print(file_name + ": " + str(perplexity))
 
+def _print_perplexity_avg(corpus, data):
+    values = list(data.values())
+    total = sum(values)
+    avg = float(total) / len(values)
+    print(corpus + ": " + str(avg))
 def handle_perplexity_calculation(ngram, corpus):
     corpora = grab_files()
     #Need to generate N1_N0
@@ -1042,39 +1047,35 @@ def handle_perplexity_calculation(ngram, corpus):
         # unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
         unigram_probs, _ = calc_gt_all_corpora_unigram(corpora)
         perplexity_data = calc_unigram_perplexity(corpora, unigram_probs, test_corpus)
-        try:
-            data = perplexity_data[corpus]
-        except KeyError:
-            print("ERROR: Unknown corpus")
-            sys.exit(1)
-        _pretty_print_perplexity(data)
-        sys.exit(0)
     elif ngram == "bigram":
         #Non smoothed
         # bigram_probs = calc_all_corpora_bigram(corpora)
         #Smoothed
         bigram_probs = calc_gt_all_corpora_bigram(corpora)
         perplexity_data = calc_bigram_perplexity(corpora, bigram_probs, test_corpus)
-        try:
-            data = perplexity_data[corpus]
-        except KeyError:
-            print("ERROR: Unknown corpus")
-            sys.exit(1)
-        _pretty_print_perplexity(data)
-        sys.exit(0)
     elif ngram == "trigram":
         trigram_probs = calc_all_corpora_trigram(corpora)
         perplexity_data = calc_trigram_perplexity(corpora, trigram_probs, test_corpus)
+    else:
+        print("ERROR: Unknown ngram type")
+        sys.exit(1)
+
+    if corpus != "all":
         try:
             data = perplexity_data[corpus]
         except KeyError:
             print("ERROR: Unknown corpus")
             sys.exit(1)
         _pretty_print_perplexity(data)
-        sys.exit(0)
     else:
-        print("ERROR: Unknown ngram type")
-        sys.exit(1)
+        # for corpus in corpora:
+        #     _pretty_print_perplexity(perplexity_data[corpus])
+        #Show averages
+        print("Averages for " + ngram + ":")
+        for corpus in corpora:
+            data = perplexity_data[corpus]
+            _print_perplexity_avg(corpus, data)
+    sys.exit(0)
 
 def handle_spell_checker(corpus):
     corpora = grab_files()
