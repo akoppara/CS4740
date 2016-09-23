@@ -1067,6 +1067,8 @@ def handle_perplexity_calculation(ngram, corpus):
             print("ERROR: Unknown corpus")
             sys.exit(1)
         _pretty_print_perplexity(data)
+        print("======Average======")
+        _print_perplexity_avg(corpus, data)
     else:
         # for corpus in corpora:
         #     _pretty_print_perplexity(perplexity_data[corpus])
@@ -1103,7 +1105,7 @@ if __name__ == '__main__':
 
     # spell_check("atheism")
 
-    arg_options = ["sentence", "perplexity", "spell-check", "classification", "test"]
+    arg_options = ["sentence", "perplexity", "spell-check", "classification"]
 
     secondary_opts = {
     "spell-check" : 1,
