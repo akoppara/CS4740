@@ -296,7 +296,7 @@ def calc_gt_all_corpora_bigram (corpora):
         corpora_probs[key] = corpus_probs
         corpora_totals[key] = total_c_star
 
-    return (corpora_probs, corpora_totals)
+    return (corpora_probs)
 
 #adjust threshold if necessary
 bigram_threshold = 100000
