@@ -6,6 +6,7 @@ import copy
 import numpy as np
 import math
 import operator
+import json
 
 corpus_dict = {}
 
@@ -291,6 +292,7 @@ def _unigram_next_term(corpus_probs):
     #Given a set of probabilities, choose a word randomly according to those probs
     words = list(corpus_probs.keys())
     probs = list(corpus_probs.values())
+    print(sum(probs))
     choice = np.random.choice(words, p=probs)
     return choice
 
@@ -324,6 +326,7 @@ def _bigram_next_term(prev_term, corpus_probs):
     next_word_probs = corpus_probs[prev_term]
     words = list(next_word_probs.keys())
     probs = list(next_word_probs.values())
+    print(sum(probs))
     choice = np.random.choice(words, p=probs)
     return choice
 
@@ -487,6 +490,7 @@ def calc_gt_all_corpora_unigram (corpora):
             else:
                 freq_of_freqs[count] = 1
         for word, count in unigram_counts.items():
+
             prob = p_star_values[count] / freq_of_freqs[count]
             corpus_probs[word] = prob
             p_sum += corpus_probs[word]
@@ -569,7 +573,11 @@ def calc_unigram_freq (corpus):
 
 
 
-
+def quick_test(probs):
+    print(probs["it"])
+    for word, prob in probs.items():
+        if prob == 0.0:
+            print(word)
     
 
 def _unigram_perplexity(unigram_probs, test_file):
@@ -578,12 +586,14 @@ def _unigram_perplexity(unigram_probs, test_file):
     #calc sum of log probs
     summation = 0.0
     N = len(test_file)
+    quick_test(unigram_probs)
     for i, word in enumerate(test_file):
+        print(word)
         try:
             prob = unigram_probs[word]
         except KeyError:
             prob = unigram_probs[UNK_TOKEN]
-
+        print(prob)
         summation += (-1) * (math.log(prob))
     #multiply by 1/N
     result = (1.0 / N) * summation
@@ -829,10 +839,16 @@ def spell_check(corpus):
 def handle_sentence_generation(ngram, corpus):
     corpora = grab_files()
     if ngram == "unigram":
-        unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
+        #Non smoothed
+        # unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
+        #Smoothed
+        unigram_probs, _ = calc_gt_all_corpora_unigram(corpora)
         generate_unigram_sentence(corpus, unigram_probs)
     elif ngram == "bigram":
-        bigram_probs = calc_all_corpora_bigram(corpora)
+        #Non smoothed
+        # bigram_probs = calc_all_corpora_bigram(corpora)
+        #Smoothed
+        bigram_probs = calc_gt_all_corpora_bigram(corpora)
         generate_bigram_sentence(corpus, bigram_probs)
     else:
         print("ERROR: Unknown ngram type")
@@ -847,7 +863,9 @@ def handle_perplexity_calculation(ngram, corpus):
     corpora = grab_files()
     test_corpus = get_test_corpus()
     if ngram == "unigram":
-        unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
+        #Non smoothed
+        # unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
+        unigram_probs, _ = calc_gt_all_corpora_unigram(corpora)
         perplexity_data = calc_unigram_perplexity(corpora, unigram_probs, test_corpus)
         try:
             data = perplexity_data[corpus]
@@ -930,14 +948,14 @@ if __name__ == '__main__':
         else:
             #testing purposes, call any functions here
             corpora = grab_files()
-            #calc_gt_all_corpora_bigram(corpora)
-            all_corpora_gt = calc_gt_all_corpora_bigram(corpora)
-            for section, corpus_probs in all_corpora_gt.items():
-                #print(corpus_probs)
-                for word, prob in corpus_probs.items():
-                    if (prob == 0):
-                        print(word)
-                        print(prob)
+            #calc_gt_all_corpora_unigram(corpora)
+            gt_probs = calc_gt_all_corpora_bigram(corpora)
+            reg_probs = calc_all_corpora_bigram(corpora)
+            print(gt_probs["atheism"])
+            # print reg_probs
+            # json.dump(gt_probs["atheism"], open("gt.json", "w"))
+            # json.dump(reg_probs["atheism"], open("reg.json", "w"))
+            calc_gt_all_corpora_bigram(corpora)
             #calc_gt_all_corpora_bigram(corpora)
             #for key in corpora:
             #    count_trigram_tokens(corpora[key])
