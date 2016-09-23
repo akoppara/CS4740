@@ -10,6 +10,7 @@ import operator
 corpus_dict = {}
 
 UNK_TOKEN = "<unk>"
+N1_N0 = 0
 
 def get_corpus_name(path):
     if 'train_docs' in path:
@@ -203,7 +204,7 @@ def calc_bigram_prob(bigram_counts, corpus):
 
     return bigram_probs
 
-def calc_all_corpora_bigram(corpora):
+def calc_all_corpora_bigram(corpus):
     corpora_probs = {}
     for key in corpora:
         corpus = corpora[key]
@@ -211,9 +212,9 @@ def calc_all_corpora_bigram(corpora):
         bigram_probs = calc_bigram_prob(bigram_counts, corpus)
         corpora_probs[key] = bigram_probs
 
-        _,unigram_counts = calc_all_corpora_unigram(corpora)
-        vocab_size = unigram_counts[key]
-        calc_gt_probability(bigram_counts, vocab_size)
+        #_,unigram_counts = calc_all_corpora_unigram(corpora)
+        #vocab_size = unigram_counts[key]
+        #calc_gt_probability(bigram_counts, vocab_size)
 
     return corpora_probs
 
@@ -285,44 +286,72 @@ def generate_bigram_sentence(corpus, bigram_probs, start="."):
     print(sentence)
 
 
+
+def calc_gt_all_corpora_bigram (corpora):
+    corpora_probs = {}
+    corpora_totals = {}
+    for key, corpus in corpora.items():
+        corpus_probs = {}
+        bigram_counts = count_bigram_tokens(corpus)
+        unigram_counts, total_tokens = count_tokens(corpus)
+        p_star_values, total_c_star = calc_bigram_gt_prob(corpus)
+        #print(p_star_values)
+        for word, following in bigram_counts.items():
+            following_probs = {}
+            for following_word, count in following.items():
+                prob = p_star_values[count]
+                following_probs[following_word] = prob
+            corpus_probs[word] = following_probs
+        corpora_probs[key] = corpus_probs
+        corpora_totals[key] = total_c_star
+
+    return (corpora_probs)
+
 #adjust threshold if necessary
-def calc_gt_probability (bigram_counts, vocab_size):
-    #threshold = 20
-    bigram_frequency_list = calc_bigram_freq(bigram_counts, vocab_size)
-    bigram_gt_c_star_list = {}
+bigram_threshold = 100000
+def calc_bigram_gt_prob (corpus):
+    bigram_freq, total_possible = calc_bigram_freq(corpus)
+    c_star_values = {}
+    p_star_values = {}
+    p_star_total = 0
+
+    for freq, freq_of_freq in bigram_freq.items():
+        first_or_not_empty = (bigram_freq[freq] != 0) or (freq == 0) 
+        if ((first_or_not_empty) and (freq < len(bigram_freq)-1)):
+            if (freq != 0):
+                c_star = (freq + 1) * ( ( bigram_freq[freq + 1] ) / ( bigram_freq[freq] ) )
+                c_star_values[freq] = c_star
+            else:
+                c_star = bigram_freq[freq + 1] / total_possible
+                c_star_values[freq] = c_star
+        elif (freq == len(bigram_freq)-1):
+            c_star = 0
+            c_star_values[freq] = c_star 
+
+    total_possible = 0
+    for freq, c_star in c_star_values.items():
+        total_possible += c_star
+
+
+    #print(c_star_values) 
     count = 0
-    sum_of_p = 0
+    for freq, c_star in c_star_values.items():
+        p_star = c_star / total_possible
+        if (count < bigram_threshold):
+            p_star_values[freq] = p_star
+            count += 1
+        elif (count == bigram_threshold):
+            p_star_values[freq] = 0
+            count += 1
+    count = 0
+    for freq, p_star in p_star_values.items():
+        if (count == 0):
+            p_star_total += p_star 
+        elif (count <= bigram_threshold):
+            p_star_total += p_star * freq
+            count += 1
 
-    for key, value in bigram_frequency_list.items():
-        if (key == 0):
-            c_star = (bigram_frequency_list[1])
-            #print(bigram_frequency_list[1])
-            bigram_gt_c_star_list[count] = c_star
-        elif ((bigram_frequency_list[key] == 0) or (key == len(bigram_frequency_list) - 1)):
-            bigram_gt_c_star_list[count] = 0
-        else:
-            c_star = ( key + 1 ) * ( ( bigram_frequency_list[key + 1] ) / ( bigram_frequency_list[key] ) )
-            bigram_gt_c_star_list[count] = c_star
-        count += 1
-
-        #if (bigram_frequency_list[key + 1] != 0):
-        #    c_star = ( key + 1 ) * ( ( bigram_frequency_list[key + 1] ) / ( bigram_frequency_list[key] ) )
-        #    bigram_gt_c_star_list[count] = c_star
-        #    count += 1
-        #elif (bigram_frequency_list[key + 1] == 0):
-        #    bigram_gt_c_star_list[count] = 0
-        #    break
-
-    bigram_gt_p_star_list = copy.deepcopy(bigram_gt_c_star_list)
-    for key, value in bigram_gt_p_star_list.items():
-        bigram_gt_p_star_list[key] = value / vocab_size
-        sum_of_p += bigram_gt_p_star_list[key]
-
-    #print(vocab_size)
-    #print(bigram_gt_c_star_list[0])
-    #print(bigram_gt_p_star_list[0])
-    #print(bigram_gt_p_star_list)
-    #print('*****************' + str(sum_of_p) + '***********')
+    return (p_star_values, total_possible)
 
 
 
@@ -331,7 +360,11 @@ def calc_gt_probability (bigram_counts, vocab_size):
 #the goal of this function is to count the frequency of each frequency of bigram happening
 #ex. there were 3 bigrams that occurred 1 time, 2 that occurred 2 times, 1 that occurred 3 times, and 10 that occurred 0 times
 #to calculate the bigrams that occurred 0 times, it is (V^2 - bigrams that have occurred) where V is the vocabulary
-def calc_bigram_freq (bigram_counts, vocab_size):
+def calc_bigram_freq (corpus):
+    bigram_counts = count_bigram_tokens(corpus)
+    unigram_counts, vocab_size = count_tokens(corpus)
+    total = vocab_size ** 2
+
     #print(bigram_counts)
     bigram_freq = {}
     max_value = 0
@@ -353,7 +386,94 @@ def calc_bigram_freq (bigram_counts, vocab_size):
     #print(vocab_size)
     bigram_freq[0] = freq_for_0
     #print(bigram_freq)
-    return (bigram_freq)
+    return (bigram_freq, total)
+
+
+def calc_gt_all_corpora_unigram (corpora):
+    corpora_probs = {}
+    corpora_totals = {}
+
+    for key, corpus in corpora.items():
+        corpus_probs = {}
+        unigram_counts, total_tokens = count_tokens(corpus)
+        p_star_values, total_c_star = calc_unigram_gt_prob(corpus)
+
+        for word, count in unigram_counts.items():
+            prob = p_star_values[count]
+            corpus_probs[word] = prob
+        #print(corpus_probs)
+        corpora_probs[key] = corpus_probs
+        corpora_totals[key] = total_c_star
+
+    return (corpora_probs, corpora_totals)
+
+
+
+unigram_threshold = 10000
+def calc_unigram_gt_prob (corpus):
+    unigram_freq, vocab_size = calc_unigram_freq(corpus)
+    c_star_values = {}
+    p_star_values = {}
+    p_star_total = 0
+
+    for freq, freq_of_freq in unigram_freq.items():
+        first_or_not_empty = (unigram_freq[freq] != 0) or (freq == 0) 
+        if ((first_or_not_empty) and (freq < len(unigram_freq)-1)):
+            if (freq != 0):
+                c_star = (freq + 1) * ( ( unigram_freq[freq + 1] ) / ( unigram_freq[freq] ) )
+                c_star_values[freq] = c_star
+            else:
+                c_star = unigram_freq[freq + 1] / vocab_size
+                c_star_values[freq] = c_star
+        elif (freq == len(unigram_freq)-1):
+            c_star = 0
+            c_star_values[freq] = c_star 
+
+    vocab_size = 0
+    for freq, c_star in c_star_values.items():
+        vocab_size += c_star
+
+
+    #print(c_star_values) 
+    count = 0
+    for freq, c_star in c_star_values.items():
+        p_star = c_star / vocab_size
+        if (count < unigram_threshold):
+            p_star_values[freq] = p_star
+            count += 1
+        elif (count == unigram_threshold):
+            p_star_values[freq] = 0
+            count += 1
+    count = 0
+    for freq, p_star in p_star_values.items():
+        if (count == 0):
+            p_star_total += p_star 
+        elif (count <= unigram_threshold):
+            p_star_total += p_star * freq
+            count += 1
+
+    #print(p_star_values)
+    return (p_star_values, vocab_size)
+
+def calc_unigram_freq (corpus):
+    counts, total = count_tokens(corpus)
+    frequency = {}
+    max_value = 0
+    for word, freq in counts.items():
+        if (freq > max_value):
+            max_value = freq
+    for x in range(0, max_value+1):
+        frequency[x] = 0
+    for word, freq in counts.items():
+        frequency[freq] += 1
+
+    #print(frequency)
+
+    return frequency, total
+
+
+
+
     
 
 def _unigram_perplexity(unigram_probs, test_file):
@@ -366,10 +486,8 @@ def _unigram_perplexity(unigram_probs, test_file):
         try:
             prob = unigram_probs[word]
         except KeyError:
-            #TODO: Uncomment me when unknown/smoothing implemented
             prob = unigram_probs[UNK_TOKEN]
-            # print "UNK"
-            # prob = 0.0025
+
         summation += (-1) * (math.log(prob))
     #multiply by 1/N
     result = (1.0 / N) * summation
@@ -590,10 +708,10 @@ def spell_check(corpus):
                 correct_token = max(token_probs.iteritems(), key=operator.itemgetter(1))[0]
 
 
-                print "Previous Token: ", prev_token
-                print "Current Token: ", token
-                print "Probs: ", token_probs
-                print "Correct Token: ", correct_token
+                print ("Previous Token: ", prev_token)
+                print ("Current Token: ", token)
+                print ("Probs: ", token_probs)
+                print ("Correct Token: ", correct_token)
 
                 #check if probs are all 0
                 correct_prob = token_probs[correct_token]
@@ -716,23 +834,8 @@ if __name__ == '__main__':
         else:
             #testing purposes, call any functions here
             corpora = grab_files()
-            bigram_probs = calc_all_corpora_bigram(corpora)
-            print bigram_probs["atheism"]
-            summation = 0.0
-            for word, val in bigram_probs["atheism"].iteritems():
-                summation += val
-            print summation
-            print bigram_probs["atheism"][UNK_TOKEN]
-            # for corpus, words in corpora.items():
-            #     counts, totals = count_tokens(corpora[corpus])
-            #     word_counter = 0
-            #     for word in words:
-            #         if (counts[word] == 1):
-            #             words[word_counter] = UNK_TOKEN
-            #         word_counter += 1
-
-            # unigram_probs, corpora_totals = calc_all_corpora_unigram(corpora)
-            # bigram_probs = calc_all_corpora_bigram(corpora)
+            #calc_gt_all_corpora_unigram(corpora)
+            #calc_gt_all_corpora_bigram(corpora)
 
     else:
         print("ERROR: Unknown action option")
