@@ -294,6 +294,7 @@ def _unigram_next_term(corpus_probs):
     #Given a set of probabilities, choose a word randomly according to those probs
     words = list(corpus_probs.keys())
     probs = list(corpus_probs.values())
+    print(sum(probs))
     choice = np.random.choice(words, p=probs)
     return choice
 
@@ -366,7 +367,7 @@ def _trigram_next_term(last_term, word_before_last_word, corpus_probs):
     next_word_probs = corpus_probs[word_before_last_word][last_term]
     words = list(next_word_probs.keys())
     probs = list(next_word_probs.values())
-    print(sum(probs))
+    # print(sum(probs))
     diff = sum(probs) - 1
     if (sum(probs) != 1):
         if '.' in corpus_probs[word_before_last_word][last_term]:
@@ -542,7 +543,7 @@ def calc_gt_all_corpora_unigram (corpora):
             corpus_probs[word] = prob
             p_sum += corpus_probs[word]
         #print(corpus_probs)
-        #print(p_sum)
+        print(p_sum)
         corpora_probs[key] = corpus_probs
         corpora_totals[key] = total_c_star
 
@@ -564,7 +565,7 @@ def calc_unigram_gt_prob (name, corpus):
                     c_star = (freq + 1) * ( ( unigram_freq[freq + 1] ) / ( unigram_freq[freq] ) )
                     c_star_values[freq] = c_star
                 else:
-                    c_star = unigram_freq[freq + 1]
+                    c_star = unigram_freq[freq + 1] / vocab_size
                     c_star_values[freq] = c_star
             else:
                     c_star = unigram_freq[freq]
@@ -615,10 +616,10 @@ def calc_unigram_freq (name, corpus):
     #Because we replace all words with occurrance 1 with <unk>,
     # frequency[1] would be 0, so frequency[1] is actually count of unks
     frequency[1] = counts[UNK_TOKEN]
-
+    # frequency[counts[UNK_TOKEN]] -= 1
     # print(frequency[1])
     N1_N0[name] = frequency[1] / total
-
+    frequency[1] = 0
     return frequency, total
 
  
@@ -701,6 +702,66 @@ def calc_bigram_perplexity(corpora, bigram_probs, test_corpus):
             test_file = test_corpus[filename]
             unigram_counts, _ = count_tokens(corpora[corpus])
             perplexity = _bigram_perplexity(corpus, bigram_probs[corpus], test_file, unigram_counts)
+            corpus_data[filename] = perplexity
+        perplexity_data[corpus] = corpus_data
+    return perplexity_data
+
+
+def _trigram_perplexity(corpus, trigram_probs, test_file, unigram_counts):
+    summation = 0.0
+    N = len(test_file)
+    for i, word in enumerate(test_file):
+        prob = 0.0
+        if i == 0:
+            #Don't have enough to compute a probability
+            continue
+        elif i == 1:
+            n_2 = "."
+            n_1 = test_file[i-1]
+        else:
+            n_2 = test_file[i-2]
+            n_1 = test_file[i-1]
+
+        n = test_file[i]
+
+        if n_2 in trigram_probs:
+            outermost_prob = trigram_probs[n_2]
+        else:
+            outermost_prob = trigram_probs[UNK_TOKEN]
+            n_2 = UNK_TOKEN
+
+        if n_1 in outermost_prob:
+            inner_prob = outermost_prob[n_1]
+        elif UNK_TOKEN in outermost_prob:
+            n_1 = UNK_TOKEN
+            inner_prob = outermost_prob[UNK_TOKEN]
+        else:
+            prob = N1_N0[corpus] / (N1_N0[corpus] + unigram_counts[n_2])
+
+        #At this point, if prob is not set, then keep going else, stop
+        if prob == 0:
+            if n in inner_prob:
+                prob = inner_prob[n]
+            elif UNK_TOKEN in inner_prob:
+                prob = inner_prob[UNK_TOKEN]
+            else:
+                prob = N1_N0[corpus] / (unigram_counts[n_1] + unigram_counts[n_2])
+
+
+        summation += (-1) * (math.log(prob))
+    #multiply by 1/N
+    result = (1.0 / N) * summation
+    #answer is e^result
+    return math.exp(result) 
+
+def calc_trigram_perplexity(corpora, trigram_probs, test_corpus):
+    perplexity_data = {}
+    for corpus in corpora:
+        corpus_data = {}
+        for filename in test_corpus:
+            test_file = test_corpus[filename]
+            unigram_counts, _ = count_tokens(corpora[corpus])
+            perplexity = _trigram_perplexity(corpus, trigram_probs[corpus], test_file, unigram_counts)
             corpus_data[filename] = perplexity
         perplexity_data[corpus] = corpus_data
     return perplexity_data
@@ -960,6 +1021,7 @@ def handle_sentence_generation(ngram, corpus):
     elif ngram == "trigram":
         #unsmoothed
         trigram_probs = calc_all_corpora_trigram(corpora)
+        # print(trigram_probs)
         generate_trigram_sentence(corpus, trigram_probs)
     else:
         print("ERROR: Unknown ngram type")
@@ -990,6 +1052,7 @@ def handle_perplexity_calculation(ngram, corpus):
     elif ngram == "bigram":
         #Non smoothed
         # bigram_probs = calc_all_corpora_bigram(corpora)
+        #Smoothed
         bigram_probs = calc_gt_all_corpora_bigram(corpora)
         perplexity_data = calc_bigram_perplexity(corpora, bigram_probs, test_corpus)
         try:
@@ -997,7 +1060,16 @@ def handle_perplexity_calculation(ngram, corpus):
         except KeyError:
             print("ERROR: Unknown corpus")
             sys.exit(1)
-        print(N1_N0)
+        _pretty_print_perplexity(data)
+        sys.exit(0)
+    elif ngram == "trigram":
+        trigram_probs = calc_all_corpora_trigram(corpora)
+        perplexity_data = calc_trigram_perplexity(corpora, trigram_probs, test_corpus)
+        try:
+            data = perplexity_data[corpus]
+        except KeyError:
+            print("ERROR: Unknown corpus")
+            sys.exit(1)
         _pretty_print_perplexity(data)
         sys.exit(0)
     else:
