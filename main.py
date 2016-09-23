@@ -163,6 +163,42 @@ def count_bigram_tokens(corpus):
 
     return d
 
+def count_trigram_tokens(corpus):
+    d = {}
+    for i in range (len(corpus)):
+        wordn = corpus[i]
+
+        if (i == 0):
+            wordn1 = "."
+            wordn2 = "."
+        elif (i == 1):
+            wordn1= corpus[i-1]
+            wordn2 = "."
+        else:
+            wordn1 = corpus[i-1]
+            wordn2 = corpus[i-2]
+
+        if wordn2 in d:
+            wd2 = d[wordn2]
+            if wordn1 in wd2:
+                wd1 = wd2[wordn1]
+                if wordn in wd1:
+                    wd1[wordn] += 1
+                else:
+                    wd1[wordn] = 1
+            else:
+                wd1 = {}
+                wd1[wordn] = 1
+                wd2[wordn1] = wd1
+        else:
+            wd2 = {}
+            wd1 = {}
+            wd1[wordn] = 1
+            wd2[wordn1] = wd1
+            d[wordn2] = wd2
+
+    return d
+
 
 #Calculates the unigram probabilities for a single corpus
 def calc_unigram_prob(counts, total):
@@ -205,13 +241,46 @@ def calc_bigram_prob(bigram_counts, corpus):
 
     return bigram_probs
 
-def calc_all_corpora_bigram(corpus):
+def calc_all_corpora_bigram(corpora):
     corpora_probs = {}
     for key in corpora:
         corpus = corpora[key]
         bigram_counts = count_bigram_tokens(corpus)
         bigram_probs = calc_bigram_prob(bigram_counts, corpus)
         corpora_probs[key] = bigram_probs
+
+        #_,unigram_counts = calc_all_corpora_unigram(corpora)
+        #vocab_size = unigram_counts[key]
+        #calc_gt_probability(bigram_counts, vocab_size)
+
+    return corpora_probs
+
+def calc_trigram_prob(trigram_counts, corpus):
+    # need unigram counts for division later
+    unigram_counts, total_tokens = count_tokens(corpus)
+    bigram_counts = count_bigram_tokens(corpus)
+    # copy of bigram_counts dictionary
+    trigram_probs = copy.deepcopy(trigram_counts)
+    # first for loop goes through outer layer of trigram counts
+    for key, value in bigram_counts.items():
+        # second for loop goes through the inner layer of each outer layer
+        for following_word, word_count in value.items():
+            bigram_prob = float(word_count) / float(unigram_counts[key])
+            bigram_probs[key][following_word] = bigram_prob
+            # print (key + " " + following_word + ": ")
+            # print(bigram_prob)
+
+    # print bigram_probs
+
+    return bigram_probs
+
+def calc_all_corpora_trigram(corpora):
+    corpora_probs = {}
+    for key in corpora:
+        corpus = corpora[key]
+        trigram_counts = count_trigram_tokens(corpus)
+        trigram_probs = calc_trigram_prob(trigram_counts, corpus)
+        corpora_probs[key] = trigram_probs
 
         #_,unigram_counts = calc_all_corpora_unigram(corpora)
         #vocab_size = unigram_counts[key]
@@ -298,13 +367,26 @@ def calc_gt_all_corpora_bigram (corpora):
         bigram_counts = count_bigram_tokens(corpus)
         unigram_counts, total_tokens = count_tokens(corpus)
         p_star_values, total_c_star = calc_bigram_gt_prob(corpus)
+        p_sum = 0
         #print(p_star_values)
+        freq_of_freqs = {}
+
+        for word, following in bigram_counts.items():
+            for following_word, count in following.items():
+                if count in freq_of_freqs:
+                    freq_of_freqs[count] += 1
+                else:
+                    freq_of_freqs[count] = 1
+
         for word, following in bigram_counts.items():
             following_probs = {}
             for following_word, count in following.items():
-                prob = p_star_values[count]
+                prob = p_star_values[count] / freq_of_freqs[count]
                 following_probs[following_word] = prob
+                p_sum += following_probs[following_word]
             corpus_probs[word] = following_probs
+
+        print(p_sum)
         corpora_probs[key] = corpus_probs
         corpora_totals[key] = total_c_star
 
@@ -327,8 +409,8 @@ def calc_bigram_gt_prob (corpus):
             else:
                 c_star = bigram_freq[freq + 1] / total_possible
                 c_star_values[freq] = c_star
-        elif (freq == len(bigram_freq)-1):
-            c_star = 0
+        else:
+            c_star = bigram_freq[freq]
             c_star_values[freq] = c_star 
 
     total_possible = 0
@@ -400,14 +482,25 @@ def calc_gt_all_corpora_unigram (corpora):
         corpus_probs = {}
         unigram_counts, total_tokens = count_tokens(corpus)
         p_star_values, total_c_star = calc_unigram_gt_prob(corpus)
+        p_sum = 0
 
+        freq_of_freqs = {}
         for word, count in unigram_counts.items():
-            prob = p_star_values[count]
-            corpus_probs[word] = prob * count
+            if count in freq_of_freqs:
+                freq_of_freqs[count] += 1
+            else:
+                freq_of_freqs[count] = 1
+        for word, count in unigram_counts.items():
+
+            prob = p_star_values[count] / freq_of_freqs[count]
+            corpus_probs[word] = prob
+            p_sum += corpus_probs[word]
         #print(corpus_probs)
+        #print(p_sum)
         corpora_probs[key] = corpus_probs
         corpora_totals[key] = total_c_star
 
+    #print(corpora_probs)
     return (corpora_probs, corpora_totals)
 
 
@@ -428,9 +521,9 @@ def calc_unigram_gt_prob (corpus):
             else:
                 c_star = unigram_freq[freq + 1] / vocab_size
                 c_star_values[freq] = c_star
-        elif (freq == len(unigram_freq)-1):
-            c_star = 0
-            c_star_values[freq] = c_star 
+        else:
+            c_star = unigram_freq[freq]
+            c_star_values[freq] = c_star
 
     vocab_size = 0
     for freq, c_star in c_star_values.items():
@@ -455,7 +548,8 @@ def calc_unigram_gt_prob (corpus):
             p_star_total += p_star * freq
             count += 1
 
-    print(p_star_total)
+    #print(p_star_values)
+    #print(p_star_total)
     return (p_star_values, vocab_size)
 
 def calc_unigram_freq (corpus):
@@ -858,6 +952,10 @@ if __name__ == '__main__':
             # print reg_probs
             # json.dump(gt_probs["atheism"], open("gt.json", "w"))
             # json.dump(reg_probs["atheism"], open("reg.json", "w"))
+            calc_gt_all_corpora_bigram(corpora)
+            #calc_gt_all_corpora_bigram(corpora)
+            #for key in corpora:
+            #    count_trigram_tokens(corpora[key])
 
     else:
         print("ERROR: Unknown action option")
