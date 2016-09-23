@@ -805,9 +805,9 @@ def spell_check(corpus, tokens):
     confusion_set = parse_confusion_set()
 
 
-    path = "data_corrected\spell_checking_task\%s\\train_modified_docs" % corpus
+    path = "data_corrected\spell_checking_task\%s\\test_modified_docs" % corpus
 
-    clean_path = "data_corrected\spell_checking_task\%s\\train_modified_docs_TEST" % corpus
+    clean_path = "data_corrected\spell_checking_task\%s\\test_docs" % corpus
 
     if not os.path.exists(clean_path):
         os.mkdir(clean_path)
@@ -878,10 +878,10 @@ def spell_check(corpus, tokens):
                 correct_token = max(token_probs.items(), key=operator.itemgetter(1))[0]
 
 
-                print ("Previous Token: ", prev_token)
-                print ("Current Token: ", token)
-                print ("Probs: ", token_probs)
-                print ("Correct Token: ", correct_token)
+                # print ("Previous Token: ", prev_token)
+                # print ("Current Token: ", token)
+                # print ("Probs: ", token_probs)
+                # print ("Correct Token: ", correct_token)
 
                 #check if probs are all 0
                 correct_prob = token_probs[correct_token]
@@ -966,7 +966,7 @@ def handle_spell_checker(corpus):
         print("ERROR: Unknown corpus")
         sys.exit(1)
     spell_check(corpus, corpora[corpus])
-    print("DONE")
+    print("DONE -- " + corpus)
 
 if __name__ == '__main__':
     # corpora = grab_files()
@@ -1018,7 +1018,12 @@ if __name__ == '__main__':
         elif option == "perplexity":
             handle_perplexity_calculation(ngram, corpus)
         elif option == "spell-check":
-            handle_spell_checker(corpus)
+            if corpus == "all":
+                corpora = grab_files()
+                for corpus in corpora:
+                    handle_spell_checker(corpus)
+            else:
+                handle_spell_checker(corpus)
         elif option == "classification":
             topic_classification()
         else:
@@ -1035,7 +1040,8 @@ if __name__ == '__main__':
             #calc_gt_all_corpora_bigram(corpora)
             #for key in corpora:
             #    count_trigram_tokens(corpora[key])
-            topic_classification()
+            # topic_classification()
+            pass
 
     else:
         print("ERROR: Unknown action option")
